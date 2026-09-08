@@ -8,8 +8,30 @@ const NOTE_EXTENSION = '.txt';
 export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.commands.registerCommand('projectNote.open', openProjectNote),
-    vscode.commands.registerCommand('projectNote.setStorageDirectory', setStorageDirectory)
+    vscode.commands.registerCommand('projectNote.setStorageDirectory', setStorageDirectory),
+    vscode.window.registerTreeDataProvider('projectNote.view', new ProjectNoteTreeProvider())
   );
+}
+
+class ProjectNoteTreeProvider implements vscode.TreeDataProvider<vscode.TreeItem> {
+  getTreeItem(element: vscode.TreeItem): vscode.TreeItem {
+    return element;
+  }
+
+  getChildren(): vscode.TreeItem[] {
+    const openItem = new vscode.TreeItem('Open Project Note', vscode.TreeItemCollapsibleState.None);
+    openItem.command = { command: 'projectNote.open', title: 'Open Project Note' };
+    openItem.iconPath = new vscode.ThemeIcon('note');
+
+    const storageItem = new vscode.TreeItem('Set Storage Directory', vscode.TreeItemCollapsibleState.None);
+    storageItem.command = {
+      command: 'projectNote.setStorageDirectory',
+      title: 'Set Storage Directory'
+    };
+    storageItem.iconPath = new vscode.ThemeIcon('folder');
+
+    return [openItem, storageItem];
+  }
 }
 
 async function setStorageDirectory(): Promise<void> {
@@ -31,7 +53,7 @@ async function setStorageDirectory(): Promise<void> {
 }
 
 async function openProjectNote(): Promise<void> {
-  let storageDirectory = vscode.workspace.getConfiguration('projectNote').get<string>('storageDirectory', '');
+  let storageDirectory = vscode.workspace.getConfiguration('projectNote').get<string>(STORAGE_KEY.split('.')[1], '');
 
   if (!storageDirectory) {
     const action = await vscode.window.showWarningMessage(
@@ -40,7 +62,7 @@ async function openProjectNote(): Promise<void> {
     );
     if (action !== 'Set Storage Directory') return;
     await setStorageDirectory();
-    storageDirectory = vscode.workspace.getConfiguration('projectNote').get<string>('storageDirectory', '');
+    storageDirectory = vscode.workspace.getConfiguration('projectNote').get<string>(STORAGE_KEY.split('.')[1], '');
   }
 
   const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
@@ -62,8 +84,6 @@ async function openProjectNote(): Promise<void> {
       await fs.writeFile(notePath, '', 'utf8');
     }
 
-    // Open the real file, rather than an untitled document. VS Code's normal
-    // save flow then persists edits directly to the configured storage folder.
     const document = await vscode.workspace.openTextDocument(vscode.Uri.file(notePath));
     await vscode.window.showTextDocument(document, { preview: false, preserveFocus: false });
   } catch (error) {
