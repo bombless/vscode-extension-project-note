@@ -37,7 +37,7 @@
         {
           "id": "projectNote",
           "title": "Project Note",
-          "icon": "$(note)"
+          "icon": "assets/project-note.svg"
         }
       ]
     },
@@ -45,7 +45,8 @@
       "projectNote": [
         {
           "id": "projectNote.view",
-          "name": "Project Note"
+          "name": "Project Note",
+          "type": "webview"
         }
       ]
     },

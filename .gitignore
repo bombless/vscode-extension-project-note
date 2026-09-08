@@ -2,3 +2,9 @@ node_modules/
 dist/
 *.vsix
 .vscode-test/
+.vscodeignore
+.vscode-test-user
+.vscode-test-extensions
+.vscode
+.vscode-cdp-extensions
+.vscode-cdp-user
