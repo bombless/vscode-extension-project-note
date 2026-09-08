@@ -6,9 +6,10 @@ const STORAGE_KEY = 'projectNote.storageDirectory';
 const NOTE_EXTENSION = '.txt';
 
 export function activate(context: vscode.ExtensionContext) {
-  const open = vscode.commands.registerCommand('projectNote.open', () => openProjectNote());
-  const setStorage = vscode.commands.registerCommand('projectNote.setStorageDirectory', () => setStorageDirectory());
-  context.subscriptions.push(open, setStorage);
+  context.subscriptions.push(
+    vscode.commands.registerCommand('projectNote.open', openProjectNote),
+    vscode.commands.registerCommand('projectNote.setStorageDirectory', setStorageDirectory)
+  );
 }
 
 async function setStorageDirectory(): Promise<void> {
@@ -21,8 +22,8 @@ async function setStorageDirectory(): Promise<void> {
 
   if (!selected?.[0]) return;
   const directory = selected[0].fsPath;
-  await vscode.workspace.getConfiguration().update(
-    STORAGE_KEY,
+  await vscode.workspace.getConfiguration('projectNote').update(
+    'storageDirectory',
     directory,
     vscode.ConfigurationTarget.Global
   );
@@ -30,14 +31,16 @@ async function setStorageDirectory(): Promise<void> {
 }
 
 async function openProjectNote(): Promise<void> {
-  const storageDirectory = vscode.workspace.getConfiguration().get<string>(STORAGE_KEY, '');
+  let storageDirectory = vscode.workspace.getConfiguration('projectNote').get<string>('storageDirectory', '');
+
   if (!storageDirectory) {
     const action = await vscode.window.showWarningMessage(
       'Project Note storage directory has not been configured.',
       'Set Storage Directory'
     );
-    if (action === 'Set Storage Directory') await setStorageDirectory();
-    return;
+    if (action !== 'Set Storage Directory') return;
+    await setStorageDirectory();
+    storageDirectory = vscode.workspace.getConfiguration('projectNote').get<string>('storageDirectory', '');
   }
 
   const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
@@ -46,72 +49,45 @@ async function openProjectNote(): Promise<void> {
     return;
   }
 
-  const projectPath = workspaceFolder.uri.fsPath;
-  const notePath = await getNotePath(storageDirectory, projectPath);
+  if (!storageDirectory) return;
+
+  const notePath = getNotePath(storageDirectory, workspaceFolder.uri.fsPath);
 
   try {
     await fs.mkdir(storageDirectory, { recursive: true });
-    let content = '';
     try {
-      content = await fs.readFile(notePath, 'utf8');
+      await fs.access(notePath);
     } catch (error: unknown) {
       if (!isNodeError(error, 'ENOENT')) throw error;
+      await fs.writeFile(notePath, '', 'utf8');
     }
 
-    const document = await vscode.workspace.openTextDocument({
-      language: 'plaintext',
-      content
-    });
-    const editor = await vscode.window.showTextDocument(document, { preview: false });
-
-    const save = vscode.commands.registerCommand('projectNote.saveCurrentNote', async () => {
-      if (vscode.window.activeTextEditor !== editor) return;
-      await fs.writeFile(notePath, document.getText(), 'utf8');
-      vscode.window.setStatusBarMessage('Project Note saved', 2000);
-    });
-
-    const disposable = vscode.workspace.onDidSaveTextDocument(async (savedDocument) => {
-      if (savedDocument.uri.toString() !== document.uri.toString()) return;
-      try {
-        await fs.writeFile(notePath, savedDocument.getText(), 'utf8');
-        vscode.window.setStatusBarMessage('Project Note saved', 2000);
-      } catch (error) {
-        vscode.window.showErrorMessage(`Failed to save Project Note: ${error}`);
-      }
-    });
-
-    editor.document.isDirty;
-    contextlessCleanup(save, disposable);
+    // Open the real file, rather than an untitled document. VS Code's normal
+    // save flow then persists edits directly to the configured storage folder.
+    const document = await vscode.workspace.openTextDocument(vscode.Uri.file(notePath));
+    await vscode.window.showTextDocument(document, { preview: false, preserveFocus: false });
   } catch (error) {
     vscode.window.showErrorMessage(`Failed to open Project Note: ${error}`);
   }
 }
 
-async function getNotePath(storageDirectory: string, projectPath: string): Promise<string> {
+function getNotePath(storageDirectory: string, projectPath: string): string {
   const projectName = path.basename(projectPath) || 'project';
-  const projectId = encodeProjectPath(projectPath);
+  const projectId = hashProjectPath(projectPath);
   return path.join(storageDirectory, `${projectName}-${projectId}${NOTE_EXTENSION}`);
 }
 
-function encodeProjectPath(projectPath: string): string {
-  // Keep the filename portable across Windows/macOS/Linux while making two
-  // projects with the same basename unlikely to collide.
+function hashProjectPath(projectPath: string): string {
   let hash = 2166136261;
   for (const char of projectPath) {
     hash ^= char.codePointAt(0) ?? 0;
     hash = Math.imul(hash, 16777619);
   }
-  return (hash >>> 0).toString(16);
+  return (hash >>> 0).toString(16).padStart(8, '0');
 }
 
 function isNodeError(error: unknown, code: string): error is NodeJS.ErrnoException {
   return typeof error === 'object' && error !== null && 'code' in error && (error as NodeJS.ErrnoException).code === code;
-}
-
-function contextlessCleanup(...disposables: vscode.Disposable[]): void {
-  // The document is intentionally independent of the extension activation
-  // context. VS Code disposes the editor/document listeners when the session ends.
-  void disposables;
 }
 
 export function deactivate() {}
