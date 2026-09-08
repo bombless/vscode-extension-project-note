@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="{{csp}}">
+  <link rel="stylesheet" href="{{styleUri}}">
+  <title>Project Note</title>
+</head>
+<body>
+  <section id="setup">
+    <h2>存储目录</h2>
+    <p>选择一个项目目录外的文件夹，用来保存项目笔记。</p>
+    <button id="select-directory" type="button">选择存储目录</button>
+  </section>
+  <section id="editor">
+    <textarea id="note" aria-label="Project note" placeholder="为当前项目写下笔记..."></textarea>
+    <div id="footer">
+      <button id="save-note" type="button">保存笔记</button>
+      <div id="status" role="status"></div>
+    </div>
+  </section>
+  <script nonce="{{nonce}}">
+    const vscode = acquireVsCodeApi();
+    const note = document.getElementById('note');
+    const status = document.getElementById('status');
+    const setup = document.getElementById('setup');
+    const editor = document.getElementById('editor');
+    const selectDirectory = document.getElementById('select-directory');
+    const saveNote = document.getElementById('save-note');
+    let editable = false;
+
+    const setStatus = (text, isError = false) => {
+      status.textContent = text;
+      status.classList.toggle('error', isError);
+    };
+
+    const save = () => {
+      if (!editable) return;
+      saveNote.disabled = true;
+      setStatus('正在保存...');
+      vscode.postMessage({ type: 'save', content: note.value });
+    };
+
+    note.addEventListener('input', () => {
+      if (editable) setStatus('未保存');
+    });
+    saveNote.addEventListener('click', save);
+    selectDirectory.addEventListener('click', () => vscode.postMessage({ type: 'selectStorageDirectory' }));
+    window.addEventListener('message', (event) => {
+      const message = event.data;
+      if (message.type === 'load') {
+        note.value = message.content;
+        editable = Boolean(message.notePath);
+        setup.style.display = editable ? 'none' : 'block';
+        editor.style.display = editable ? 'flex' : 'none';
+        note.disabled = !editable;
+        saveNote.disabled = !editable;
+        setStatus(message.message || (editable ? '已保存' : ''), Boolean(message.message));
+      }
+      if (message.type === 'saved') {
+        saveNote.disabled = false;
+        setStatus('已保存');
+      }
+      if (message.type === 'saveError') {
+        saveNote.disabled = false;
+        setStatus(message.message, true);
+      }
+    });
+    vscode.postMessage({ type: 'ready' });
+  </script>
+</body>
+</html>

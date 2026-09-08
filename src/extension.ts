@@ -6,7 +6,7 @@ const STORAGE_KEY = 'projectNote.storageDirectory';
 const NOTE_EXTENSION = '.txt';
 
 export function activate(context: vscode.ExtensionContext) {
-  const noteViewProvider = new ProjectNoteViewProvider();
+  const noteViewProvider = new ProjectNoteViewProvider(context.extensionUri);
 
   context.subscriptions.push(
     vscode.commands.registerCommand('projectNote.open', openProjectNote),
@@ -26,10 +26,15 @@ export function activate(context: vscode.ExtensionContext) {
 class ProjectNoteViewProvider implements vscode.WebviewViewProvider {
   private view: vscode.WebviewView | undefined;
 
-  resolveWebviewView(view: vscode.WebviewView): void {
+  constructor(private readonly extensionUri: vscode.Uri) {}
+
+  async resolveWebviewView(view: vscode.WebviewView): Promise<void> {
     this.view = view;
-    view.webview.options = { enableScripts: true };
-    view.webview.html = getWebviewHtml(view.webview);
+    view.webview.options = {
+      enableScripts: true,
+      localResourceRoots: [vscode.Uri.joinPath(this.extensionUri, 'media')]
+    };
+    view.webview.html = await getWebviewHtml(view.webview, this.extensionUri);
     view.webview.onDidReceiveMessage(async (message: unknown) => {
       if (!isViewMessage(message)) return;
       if (message.type === 'ready') await this.refresh();
@@ -167,37 +172,16 @@ function isViewMessage(message: unknown): message is { type: 'ready' } | { type:
       ((message as { type: unknown }).type === 'save' && typeof (message as { content?: unknown }).content === 'string'));
 }
 
-function getWebviewHtml(webview: vscode.Webview): string {
+async function getWebviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri): Promise<string> {
   const nonce = createNonce();
   const csp = `default-src 'none'; style-src ${webview.cspSource}; script-src 'nonce-${nonce}'`;
-  return `<!DOCTYPE html>
-<html lang="en"><head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta http-equiv="Content-Security-Policy" content="${csp}"><title>Project Note</title>
-<style>
-html, body { height: 100%; }
-body { box-sizing: border-box; color: var(--vscode-foreground); font-family: var(--vscode-font-family); margin: 0; overflow: hidden; padding: 10px; }
-#editor { display: none; flex-direction: column; height: 100%; min-height: 0; }
-#project { color: var(--vscode-descriptionForeground); font-size: 12px; margin: 0 0 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#note { background: var(--vscode-input-background); border: 1px solid var(--vscode-input-border, transparent); box-sizing: border-box; color: var(--vscode-input-foreground); flex: 1; font-family: var(--vscode-editor-font-family); font-size: var(--vscode-editor-font-size); line-height: 1.6; min-height: 0; outline: none; padding: 10px; resize: none; width: 100%; }
-#note:focus { border-color: var(--vscode-focusBorder); } #note:disabled { opacity: 0.6; }
-#footer { align-items: center; display: flex; gap: 8px; margin-top: 8px; min-height: 28px; }
-#status { color: var(--vscode-descriptionForeground); flex: 1; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } #status.error { color: var(--vscode-errorForeground); }
-button { background: var(--vscode-button-background); border: 0; color: var(--vscode-button-foreground); cursor: pointer; font: inherit; padding: 6px 10px; } button:hover:not(:disabled) { background: var(--vscode-button-hoverBackground); } button:disabled { cursor: default; opacity: 0.55; }
-#setup { display: none; padding-top: 4px; } #setup h2 { font-size: 14px; font-weight: 600; margin: 0 0 8px; } #setup p { color: var(--vscode-descriptionForeground); font-size: 12px; line-height: 1.5; margin: 0 0 14px; }
-</style></head><body>
-<section id="setup"><h2>存储目录</h2><p>选择一个项目目录外的文件夹，用来保存项目笔记。</p><button id="select-directory" type="button">选择存储目录</button></section>
-<section id="editor"><div id="project"></div><textarea id="note" aria-label="Project note" placeholder="为当前项目写下笔记..."></textarea><div id="footer"><div id="status" role="status"></div><button id="save-note" type="button">保存笔记</button></div></section>
-<script nonce="${nonce}">
-const vscode = acquireVsCodeApi(); const note = document.getElementById('note'); const project = document.getElementById('project'); const status = document.getElementById('status'); const setup = document.getElementById('setup'); const editor = document.getElementById('editor'); const selectDirectory = document.getElementById('select-directory'); const saveNote = document.getElementById('save-note'); let editable = false;
-const setStatus = (text, isError = false) => { status.textContent = text; status.classList.toggle('error', isError); };
-const save = () => { if (!editable) return; saveNote.disabled = true; setStatus('正在保存...'); vscode.postMessage({ type: 'save', content: note.value }); };
-note.addEventListener('input', () => { if (editable) setStatus('未保存'); });
-saveNote.addEventListener('click', save);
-selectDirectory.addEventListener('click', () => vscode.postMessage({ type: 'selectStorageDirectory' }));
-window.addEventListener('message', (event) => { const message = event.data; if (message.type === 'load') { project.textContent = message.projectName; note.value = message.content; editable = Boolean(message.notePath); setup.style.display = editable ? 'none' : 'block'; editor.style.display = editable ? 'flex' : 'none'; note.disabled = !editable; saveNote.disabled = !editable; setStatus(message.message || (editable ? '已保存' : ''), Boolean(message.message)); } if (message.type === 'saved') { saveNote.disabled = false; setStatus('已保存'); } if (message.type === 'saveError') { saveNote.disabled = false; setStatus(message.message, true); } });
-vscode.postMessage({ type: 'ready' });
-</script></body></html>`;
+  const templateUri = vscode.Uri.joinPath(extensionUri, 'media', 'project-note.html');
+  const template = Buffer.from(await vscode.workspace.fs.readFile(templateUri)).toString('utf8');
+  const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'project-note.css'));
+  return template
+    .replace('{{csp}}', csp)
+    .replace('{{styleUri}}', styleUri.toString())
+    .replace('{{nonce}}', nonce);
 }
 
 function createNonce(): string {
