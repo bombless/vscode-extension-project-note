@@ -1,0 +1,53 @@
+{
+  "name": "project-note",
+  "displayName": "Project Note",
+  "description": "Keep a plain-text note for each VS Code project.",
+  "version": "0.1.0",
+  "publisher": "bombless",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": ["onStartupFinished"],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "projectNote.open",
+        "title": "Project Note: Open Note"
+      },
+      {
+        "command": "projectNote.setStorageDirectory",
+        "title": "Project Note: Set Storage Directory"
+      }
+    ],
+    "configuration": {
+      "title": "Project Note",
+      "properties": {
+        "projectNote.storageDirectory": {
+          "type": "string",
+          "default": "",
+          "description": "Directory used to store project notes. If empty, use the Set Storage Directory command."
+        }
+      }
+    },
+    "menus": {
+      "commandPalette": [
+        { "command": "projectNote.open" },
+        { "command": "projectNote.setStorageDirectory" }
+      ]
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./tsconfig.json",
+    "watch": "tsc -p ./tsconfig.json --watch",
+    "package": "npm run compile && npx vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.3.0",
+    "@vscode/vsce": "^3.2.2"
+  }
+}
