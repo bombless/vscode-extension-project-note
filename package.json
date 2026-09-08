@@ -32,6 +32,24 @@
         }
       }
     },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "projectNote",
+          "title": "Project Note",
+          "icon": "$(note)"
+        }
+      ]
+    },
+    "views": {
+      "projectNote": [
+        {
+          "id": "projectNote.view",
+          "name": "Project Note",
+          "type": "webview"
+        }
+      ]
+    },
     "menus": {
       "commandPalette": [
         { "command": "projectNote.open" },
