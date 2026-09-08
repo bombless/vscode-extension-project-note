@@ -9,7 +9,7 @@
     "vscode": "^1.85.0"
   },
   "categories": ["Other"],
-  "activationEvents": ["onStartupFinished"],
+  "activationEvents": ["onStartupFinished", "onView:projectNote.view"],
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
@@ -45,8 +45,7 @@
       "projectNote": [
         {
           "id": "projectNote.view",
-          "name": "Project Note",
-          "type": "webview"
+          "name": "Project Note"
         }
       ]
     },
@@ -54,6 +53,18 @@
       "commandPalette": [
         { "command": "projectNote.open" },
         { "command": "projectNote.setStorageDirectory" }
+      ],
+      "view/title": [
+        {
+          "command": "projectNote.open",
+          "when": "view == projectNote.view",
+          "group": "navigation"
+        },
+        {
+          "command": "projectNote.setStorageDirectory",
+          "when": "view == projectNote.view",
+          "group": "navigation@2"
+        }
       ]
     }
   },
